@@ -1,0 +1,7 @@
+# Local build artifacts and upstream cache
+*.zip
+catalog-v1.json
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
