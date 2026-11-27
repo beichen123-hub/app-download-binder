@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 ui_print "========================================="
-ui_print "  App Download Binder v3.2.1"
+ui_print "  App Download Binder v3.3.0"
 ui_print "  作者: KrisWu & Antigravity"
 ui_print "  适配: KernelSU / APatch / Magisk"
 ui_print "========================================="
@@ -27,12 +27,12 @@ wait_volume_key() {
     done
 }
 
-# 第一步：风险警告确认
+# 步骤 1/3：风险警告确认
 ui_print ""
-ui_print "【步骤 1/2：重要警告 / 安装前请确认】"
+ui_print "【步骤 1/3：重要警告 / 安装前请确认】"
 ui_print "1. 本模块使用 mount --bind 底层映射，不复制、不双倍占空间。"
-ui_print "2. 映射目录与原目录指向同一份文件：在 /sdcard/Download/应用下载/"
-ui_print "   中删除文件会同步删除 App 原目录里的文件，请谨慎操作！"
+ui_print "2. 映射目录与原目录指向同一份文件：在映射文件夹中删除文件"
+ui_print "   会同步删除 App 原目录里的文件，请谨慎操作！"
 ui_print "3. 覆盖更新或卸载时会自动安全解除挂载并清理映射目录，绝不误删原文件。"
 ui_print ""
 ui_print ">>> 按【音量上键 (+)】确认继续安装"
@@ -45,9 +45,33 @@ else
     abort "! 安装已取消"
 fi
 
-# 第二步：选择运行模式
+# 步骤 2/3：选择目录层级结构（1级平铺 / 2级收纳 / 3级分类）
 ui_print ""
-ui_print "【步骤 2/2：请选择初始规则模式】"
+ui_print "【步骤 2/3：请选择文件夹层级结构】"
+ui_print ">>> 按【音量上键 (+)】分级收纳在 Download/应用下载/ 下（推荐，防相册重复更彻底）"
+ui_print ">>> 按【音量下键 (-)】一级平铺：直接映射在 Download/<软件名>/ 下"
+
+CHOSEN_LAYOUT=2
+if wait_volume_key; then
+    ui_print ""
+    ui_print "【步骤 2b：选择收纳层级】"
+    ui_print ">>> 按【音量上键 (+)】二级收纳：Download/应用下载/<软件名>/（简洁推荐）"
+    ui_print ">>> 按【音量下键 (-)】三级分类：Download/应用下载/<分类>/<软件名>/（社交/网盘/浏览器/影音...）"
+    if wait_volume_key; then
+        CHOSEN_LAYOUT=2
+        ui_print "- 已选择：【二级收纳】/sdcard/Download/应用下载/<软件名>/"
+    else
+        CHOSEN_LAYOUT=3
+        ui_print "- 已选择：【三级分类】/sdcard/Download/应用下载/<分类>/<软件名>/"
+    fi
+else
+    CHOSEN_LAYOUT=1
+    ui_print "- 已选择：【一级平铺】/sdcard/Download/<软件名>/"
+fi
+
+# 步骤 3/3：选择初始规则扫描模式
+ui_print ""
+ui_print "【步骤 3/3：请选择初始规则模式】"
 ui_print ">>> 按【音量上键 (+)】全自动模式（扫描本机已知中文名 App 真实目录并加入规则）"
 ui_print ">>> 按【音量下键 (-)】标准模式（仅启用默认 + 内置 235 条开源规则库，最清爽）"
 
@@ -65,6 +89,13 @@ ui_print "- 正在安全清理旧版本残留的映射目录（绝不删原文�
 MODDIR="$MODPATH"
 . "$MODPATH/common.sh"
 
+# 先用旧模块的 mounted_paths.list 精准清理旧挂载点（兼容从一级/二级/三级任意模式切换）
+OLD_MLIST="/data/adb/modules/app_download_binder/mounted_paths.list"
+if [ -f "$OLD_MLIST" ]; then
+    MOUNTED_LIST="$OLD_MLIST"
+    unmount_recorded_paths
+    MOUNTED_LIST="$MODDIR/mounted_paths.list"
+fi
 safe_unmount_and_clean_root "Download/app"
 safe_unmount_and_clean_root "Download/App"
 safe_unmount_and_clean_root "Download/应用下载"
@@ -78,39 +109,34 @@ for _OLD_NAME in "微信" "QQ" "企业微信" "Telegram"; do
 done
 rm -f "$BASE/Download/AppBindRules.conf" 2>/dev/null
 
-# 升级清洗：自动清理旧配置里误扫的 com.xxx.xxx 包名、系统相册、更新包及大小写重复项
+# 写入配置并应用本次选择的 LAYOUT_MODE
+sed "s|^LAYOUT_MODE=.*|LAYOUT_MODE=$CHOSEN_LAYOUT|" "$MODPATH/default_rules.conf" > "$MODPATH/rules.conf"
+
 OLD_CONF="/data/adb/modules/app_download_binder/rules.conf"
 if [ -s "$OLD_CONF" ]; then
-    cp -f "$MODPATH/default_rules.conf" "$MODPATH/rules.conf"
     while IFS= read -r _RAW || [ -n "$_RAW" ]; do
         _L="$(printf '%s' "$_RAW" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
         [ -z "$_L" ] && continue
         case "$_L" in
-            \#*|AUTO_SCAN=*|SCAN_INTERVAL_HOURS=*|SKIP_EMPTY=*) continue ;;
+            \#*|LAYOUT_MODE=*|AUTO_SCAN=*|SCAN_INTERVAL_HOURS=*|SKIP_EMPTY=*) continue ;;
         esac
         _P="${_L%%|*}"
         _O="${_L#*|}"
         [ "$_P" = "$_L" ] || [ -z "$_P" ] || [ -z "$_O" ] && continue
 
-        # 过滤旧版误扫的垃圾目录（更新包/系统相机/录屏等）
         is_junk_path "$_O" && continue
-
-        # 统一规范为 Download/应用下载/<中文名>
-        _APP="${_P##*/}"
-        _APP="$(normalize_app_name "$_APP")"
-        # 丢弃未识别的原始 com.xxx.xxx 包名目录
+        _APP="$(normalize_app_name "${_P##*/}")"
         is_raw_pkg_name "$_APP" && continue
 
-        append_auto_rule "$OUT_ROOT/$_APP" "$_O" 0
+        append_auto_rule "$_APP" "$_O" 0
     done < "$OLD_CONF"
-    ui_print "- 已清洗并迁移旧配置（移除误扫的包名与系统垃圾目录，统一转为中文名）"
+    ui_print "- 已清洗并迁移原有自定义规则至新层级模式 (LAYOUT_MODE=$CHOSEN_LAYOUT)"
 else
-    cp -f "$MODPATH/default_rules.conf" "$MODPATH/rules.conf"
     ui_print "- 已生成默认配置: /data/adb/modules/app_download_binder/rules.conf"
 fi
 
 if [ ! -s "$MODPATH/rules.conf" ]; then
-    cp -f "$MODPATH/default_rules.conf" "$MODPATH/rules.conf"
+    sed "s|^LAYOUT_MODE=.*|LAYOUT_MODE=$CHOSEN_LAYOUT|" "$MODPATH/default_rules.conf" > "$MODPATH/rules.conf"
 fi
 
 set_perm "$MODPATH/rules.conf" 0 0 0644
@@ -132,5 +158,9 @@ fi
 DB_CNT="$(grep -cv '^[[:space:]]*\(#\|$\)' "$MODPATH/builtin_rules.db" 2>/dev/null || echo 0)"
 ui_print ""
 ui_print "- 内置规则库: ${DB_CNT} 条（一软件一中文文件夹，绝不生成 com.xxx 包名）"
-ui_print "- 归类总目录: /sdcard/Download/应用下载/<软件名>"
+case "$CHOSEN_LAYOUT" in
+    1) ui_print "- 当前模式: 一级平铺 -> /sdcard/Download/<软件名>/" ;;
+    3) ui_print "- 当前模式: 三级分类 -> /sdcard/Download/应用下载/<分类>/<软件名>/" ;;
+    *) ui_print "- 当前模式: 二级收纳 -> /sdcard/Download/应用下载/<软件名>/" ;;
+esac
 ui_print "- 重启手机并在解锁桌面后约 3 秒即会自动生成全部文件夹！"

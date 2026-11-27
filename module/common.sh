@@ -5,14 +5,18 @@ export PATH="/data/adb/ksu/bin:/data/adb/ap/bin:/data/adb/magisk:/system/bin:/ve
 
 BASE="/data/media/0"
 FUSE_BASE="/storage/emulated/0"
-OUT_ROOT="Download/应用下载"
 
 CONF="$MODDIR/rules.conf"
 BUILTIN_DB="$MODDIR/builtin_rules.db"
 LOG_FILE="$MODDIR/bind.log"
 LAST_SCAN_FILE="$MODDIR/last_scan.ts"
+MOUNTED_LIST="$MODDIR/mounted_paths.list"
 PROP_FILE="$MODDIR/module.prop"
 
+# 默认参数（可在 rules.conf 中覆盖）
+# LAYOUT_MODE: 1=Download/<软件名>, 2=Download/应用下载/<软件名>, 3=Download/应用下载/<分类>/<软件名>
+LAYOUT_MODE=2
+OUT_ROOT="Download/应用下载"
 AUTO_SCAN=1
 SCAN_INTERVAL_HOURS=24
 
@@ -42,8 +46,12 @@ update_module_desc() {
     STATUS_TEXT="$1"
     [ ! -f "$PROP_FILE" ] && return
     NOW_STR="$(date '+%m-%d %H:%M' 2>/dev/null || echo 'ok')"
-    DB_CNT="$(grep -cv '^[[:space:]]*\(#\|$\)' "$BUILTIN_DB" 2>/dev/null || echo 0)"
-    NEW_DESC="[$STATUS_TEXT | 规则库:${DB_CNT}条 | $NOW_STR] 目录:/sdcard/$OUT_ROOT/ | 作者:KrisWu & Antigravity"
+    case "$LAYOUT_MODE" in
+        1) _MODE_TXT="平铺" ;;
+        3) _MODE_TXT="三级分类" ;;
+        *) _MODE_TXT="二级收纳" ;;
+    esac
+    NEW_DESC="[$STATUS_TEXT | ${_MODE_TXT} | $NOW_STR] 目录:/sdcard/$OUT_ROOT/ | 作者:KrisWu & Antigravity"
     sed "s|^description=.*|description=$NEW_DESC|" "$PROP_FILE" > "${PROP_FILE}.tmp" 2>/dev/null && mv "${PROP_FILE}.tmp" "$PROP_FILE"
 }
 
@@ -60,11 +68,18 @@ ensure_conf() {
 
 load_settings() {
     ensure_conf
+    LAYOUT_MODE=2
     AUTO_SCAN=1
     SCAN_INTERVAL_HOURS=24
     while IFS= read -r RAW_LINE || [ -n "$RAW_LINE" ]; do
         LINE="$(printf '%s' "$RAW_LINE" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
         case "$LINE" in
+            LAYOUT_MODE=*)
+                VAL="${LINE#LAYOUT_MODE=}"
+                case "$VAL" in
+                    1|2|3) LAYOUT_MODE="$VAL" ;;
+                esac
+                ;;
             AUTO_SCAN=*)
                 VAL="${LINE#AUTO_SCAN=}"
                 [ "$VAL" = "0" ] && AUTO_SCAN=0 || AUTO_SCAN=1
@@ -78,6 +93,12 @@ load_settings() {
                 ;;
         esac
     done < "$CONF"
+
+    if [ "$LAYOUT_MODE" = "1" ]; then
+        OUT_ROOT="Download"
+    else
+        OUT_ROOT="Download/应用下载"
+    fi
 }
 
 is_mounted() {
@@ -105,7 +126,6 @@ dir_has_user_files() {
     [ "$(count_user_files "$1")" -gt 0 ]
 }
 
-# 判断是否属于缓存、日志、缩略图、更新包、系统相册等非用户下载路径
 is_junk_path() {
     _LOWER="$(printf '%s' "$1" | tr 'A-Z' 'a-z')"
     case "$_LOWER" in
@@ -113,7 +133,6 @@ is_junk_path() {
         *update*|*upgrade*|*preprocess*|*/asr*|*taolive*|*theme*|*patch*|*plugin*|*webview*|\
         pictures/camera|dcim/camera|pictures/screenshots|dcim/screenshots|dcim/screenrecorder|\
         pictures/gallery|dcim/restored|dcim/sdp|pictures/wv_save_image)
-            # 唯一例外：企业微信的文件存放在 files/filecache/<纯数字ID>
             case "$_LOWER" in
                 android/data/com.tencent.wework/files/filecache/*) return 1 ;;
             esac
@@ -125,7 +144,6 @@ is_junk_path() {
     esac
 }
 
-# 判断名称是否为原始安卓包名（如 com.xxx.yyy / cn.xxx.yyy），防止出现在文件夹中
 is_raw_pkg_name() {
     _LOWER="$(printf '%s' "$1" | tr 'A-Z' 'a-z')"
     case "$_LOWER" in
@@ -138,7 +156,7 @@ is_raw_pkg_name() {
     esac
 }
 
-# 大小写不敏感地把常见英文目录名或包名归一化为统一中文软件名，确保一软件一文件夹
+# 大小写不敏感归一化为统一中文软件名，确保一软件一文件夹
 normalize_app_name() {
     _LOW="$(printf '%s' "$1" | tr 'A-Z' 'a-z')"
     case "$_LOW" in
@@ -188,6 +206,72 @@ normalize_app_name() {
         com.kugou.android|酷狗音乐) echo "酷狗音乐" ;;
         kuwo|cn.kuwo.player|酷我音乐) echo "酷我音乐" ;;
         *) echo "$1" ;;
+    esac
+}
+
+# 三级分类模式（LAYOUT_MODE=3）下的软件分类
+get_app_category() {
+    case "$1" in
+        微信|QQ|TIM|企业微信|Telegram|Nekogram|NekoX|Telegram-X|钉钉|飞书|微博|小红书|知乎|BOSS直聘|知识星球|BaiduHi)
+            echo "社交办公"
+            ;;
+        百度网盘|百度网盘企业版|阿里云盘|115网盘|PikPak|天翼云盘|移动云盘|腾讯微云|曲奇云盘|文叔叔|MEGA|speedpan)
+            echo "网盘传输"
+            ;;
+        夸克|UC浏览器|QQ浏览器|X浏览器|Via浏览器|360极速浏览器|百度App)
+            echo "浏览器"
+            ;;
+        哔哩哔哩|抖音|快手|皮皮虾|人人视频|网易云音乐|QQ音乐|酷狗音乐|酷我音乐|YMusic|歌词适配|PiliPlus|Muse|影石Insta360|谷歌相机)
+            echo "影音图片"
+            ;;
+        淘宝|京东|拼多多|支付宝|菜鸟)
+            echo "购物生活"
+            ;;
+        迅雷|ADM|IDM|1DM|酷安|腾讯文档|网易邮箱大师|小米互传|小米快传|小米手表|小米运动健康|应用宝|Scene|中国移动|葫芦侠|百度文库|Winrar|AirDroid|Xender|画板)
+            echo "下载工具"
+            ;;
+        *)
+            echo "其他应用"
+            ;;
+    esac
+}
+
+# 根据当前 LAYOUT_MODE 生成目标相对路径
+resolve_pub_rel() {
+    _RAW_LEFT="$1"
+    case "$_RAW_LEFT" in
+        Download/应用下载/*)
+            _NAME="${_RAW_LEFT##*/}"
+            ;;
+        Download/app/*|Download/App/*)
+            _NAME="${_RAW_LEFT##*/}"
+            ;;
+        Download/*)
+            _NAME="${_RAW_LEFT#Download/}"
+            _NAME="${_NAME%%/*}"
+            ;;
+        */*)
+            # 用户显式自定义了非 Download 路径（如 我的文件/微信），完全尊重
+            echo "$_RAW_LEFT"
+            return
+            ;;
+        *)
+            _NAME="$_RAW_LEFT"
+            ;;
+    esac
+
+    _NAME="$(normalize_app_name "$_NAME")"
+    case "$LAYOUT_MODE" in
+        1)
+            echo "Download/$_NAME"
+            ;;
+        3)
+            _CAT="$(get_app_category "$_NAME")"
+            echo "Download/应用下载/$_CAT/$_NAME"
+            ;;
+        *)
+            echo "Download/应用下载/$_NAME"
+            ;;
     esac
 }
 
@@ -251,14 +335,14 @@ make_sub_label() {
     esac
 }
 
-# 大小写不敏感检查规则是否已存在于配置文件（修复 DCIM/WeiXinWork 与 DCIM/WeixinWork 重复问题）
 rule_exists_in_conf() {
     DST_CHECK="$1"
     tr -d '\r' < "$CONF" | grep -Fiq "|$DST_CHECK"
 }
 
+# 写入简写规则：软件名|原相对路径（切换 LAYOUT_MODE 时自动适配层级）
 append_auto_rule() {
-    PUB_REL="$1"
+    APP_OR_PUB="$1"
     ORIG_REL="$2"
     VERBOSE="$3"
 
@@ -266,11 +350,11 @@ append_auto_rule() {
         return 1
     fi
 
-    printf '%s|%s\n' "$PUB_REL" "$ORIG_REL" >> "$CONF"
+    printf '%s|%s\n' "$APP_OR_PUB" "$ORIG_REL" >> "$CONF"
     chmod 644 "$CONF" 2>/dev/null
 
-    log_msg "[自动发现] 新增规则: $PUB_REL <- $ORIG_REL"
-    [ "$VERBOSE" = "1" ] && echo "[自动发现] + $PUB_REL <- $ORIG_REL"
+    log_msg "[自动发现] 新增规则: $APP_OR_PUB <- $ORIG_REL"
+    [ "$VERBOSE" = "1" ] && echo "[自动发现] + $APP_OR_PUB <- $ORIG_REL"
     return 0
 }
 
@@ -313,12 +397,11 @@ scan_new_apps() {
 
             ORIG_FULL="$BASE/$ORIG_REL"
             if [ -d "$ORIG_FULL" ] && dir_has_user_files "$ORIG_FULL"; then
-                append_auto_rule "$OUT_ROOT/$APP_NAME" "$ORIG_REL" "$VERBOSE"
+                append_auto_rule "$APP_NAME" "$ORIG_REL" "$VERBOSE"
             fi
         done < "$BUILTIN_DB"
     fi
 
-    # 企业微信特殊适配：自动识别 files/filecache/<纯数字账号ID>
     WECOM_FC="$BASE/Android/data/com.tencent.wework/files/filecache"
     if [ -d "$WECOM_FC" ]; then
         for _WID in "$WECOM_FC"/*; do
@@ -327,13 +410,12 @@ scan_new_apps() {
             case "$_WNAME" in
                 ''|*[!0-9]*) continue ;;
                 *)
-                    append_auto_rule "$OUT_ROOT/企业微信" "Android/data/com.tencent.wework/files/filecache/$_WNAME" "$VERBOSE"
+                    append_auto_rule "企业微信" "Android/data/com.tencent.wework/files/filecache/$_WNAME" "$VERBOSE"
                     ;;
             esac
         done
     fi
 
-    # 通用启发式扫描：仅自动添加能映射出友好中文名/品牌名的 App，绝不自动生成 com.xxx.xxx 文件夹
     DATA_ROOT="$BASE/Android/data"
     if [ -d "$DATA_ROOT" ]; then
         for PKG_PATH in "$DATA_ROOT"/*; do
@@ -352,7 +434,7 @@ scan_new_apps() {
                 ORIG_REL="Android/data/$PKG/$CANDIDATE"
                 is_junk_path "$ORIG_REL" && continue
                 if [ -d "$CAND_FULL" ] && dir_has_user_files "$CAND_FULL"; then
-                    append_auto_rule "$OUT_ROOT/$APP_LABEL" "$ORIG_REL" "$VERBOSE"
+                    append_auto_rule "$APP_LABEL" "$ORIG_REL" "$VERBOSE"
                     break
                 fi
             done
@@ -371,35 +453,65 @@ safe_remove_empty_mountpoint() {
     fi
 }
 
+# 递归安全卸载并清理指定总目录（支持 2 级与 3 级分类目录，绝不误删原文件）
 safe_unmount_and_clean_root() {
     ROOT_REL="$1"
+    # 绝对禁止直接清理 Download 根目录本身
+    case "$ROOT_REL" in
+        Download|download|""|/) return ;;
+    esac
     ROOT_LOWER="$BASE/$ROOT_REL"
     ROOT_FUSE="$FUSE_BASE/$ROOT_REL"
 
+    # 先卸载 FUSE 层（若有）
     if [ -d "$ROOT_FUSE" ]; then
-        for _FD in "$ROOT_FUSE"/*; do
-            [ ! -d "$_FD" ] && continue
-            for _FSD in "$_FD"/*; do
-                [ ! -d "$_FSD" ] && continue
-                is_mounted "$_FSD" && run_global umount -l "$_FSD" 2>/dev/null
-            done
+        find "$ROOT_FUSE" -depth -type d 2>/dev/null | while IFS= read -r _FD; do
             is_mounted "$_FD" && run_global umount -l "$_FD" 2>/dev/null
         done
     fi
 
+    # 深度优先由内向外安全卸载并仅用 rmdir 清理空壳目录
     if [ -d "$ROOT_LOWER" ]; then
-        for _D in "$ROOT_LOWER"/*; do
-            [ ! -d "$_D" ] && continue
-            for _SD in "$_D"/*; do
-                [ ! -d "$_SD" ] && continue
-                is_mounted "$_SD" && run_global umount -l "$_SD" 2>/dev/null
-                safe_remove_empty_mountpoint "$_SD"
-            done
+        find "$ROOT_LOWER" -depth -type d 2>/dev/null | while IFS= read -r _D; do
             is_mounted "$_D" && run_global umount -l "$_D" 2>/dev/null
-            safe_remove_empty_mountpoint "$_D"
+            if [ -d "$_D" ] && ! is_mounted "$_D"; then
+                rm -f "$_D/.nomedia" "$_D/AppBindRules.conf" 2>/dev/null
+                rmdir "$_D" 2>/dev/null
+            fi
         done
-        rm -f "$ROOT_LOWER/AppBindRules.conf" "$ROOT_LOWER/.nomedia" 2>/dev/null
-        safe_remove_empty_mountpoint "$ROOT_LOWER"
+    fi
+}
+
+# 精准清理 mounted_paths.list 记录的所有挂载点（平铺模式 LAYOUT_MODE=1 安全清理必备）
+unmount_recorded_paths() {
+    [ ! -f "$MOUNTED_LIST" ] && return
+    while IFS= read -r _MREL || [ -n "$_MREL" ]; do
+        [ -z "$_MREL" ] && continue
+        _ML="$BASE/$_MREL"
+        _MF="$FUSE_BASE/$_MREL"
+        is_mounted "$_MF" && run_global umount -l "$_MF" 2>/dev/null
+        is_mounted "$_ML" && run_global umount -l "$_ML" 2>/dev/null
+        safe_remove_empty_mountpoint "$_ML"
+
+        # 顺带清理空的父级汇总目录（但不碰 Download 根目录本身）
+        _PARENT="$(dirname "$_MREL")"
+        case "$_PARENT" in
+            Download|download|"."|"/") ;;
+            *)
+                _PL="$BASE/$_PARENT"
+                if [ -d "$_PL" ] && ! is_mounted "$_PL"; then
+                    rm -f "$_PL/.nomedia" 2>/dev/null
+                    rmdir "$_PL" 2>/dev/null
+                fi
+                ;;
+        esac
+    done < "$MOUNTED_LIST"
+    rm -f "$MOUNTED_LIST"
+}
+
+record_mounted_path() {
+    if ! grep -Fqx "$1" "$MOUNTED_LIST" 2>/dev/null; then
+        printf '%s\n' "$1" >> "$MOUNTED_LIST"
     fi
 }
 
@@ -414,6 +526,7 @@ mount_single_target() {
     F_CNT="$(count_user_files "$ORIG_LOWER")"
 
     if is_mounted "$TARGET_LOWER"; then
+        record_mounted_path "$TARGET_REL"
         log_msg "[已挂载] $TARGET_REL <- $ORIG_REL (文件数: $F_CNT)"
         [ "$VERBOSE" = "1" ] && echo "[已生效] $TARGET_REL (文件数: $F_CNT)"
         MOUNTED_COUNT=$((MOUNTED_COUNT + 1))
@@ -426,6 +539,7 @@ mount_single_target() {
 
     ERR_OUT="$(run_global mount --bind "$ORIG_LOWER" "$TARGET_LOWER" 2>&1)"
     if [ $? -eq 0 ]; then
+        record_mounted_path "$TARGET_REL"
         if [ "$USE_FUSE" = "0" ] && [ -d "$FUSE_BASE" ] && ! is_mounted "$TARGET_FUSE"; then
             mkdir -p "$TARGET_FUSE" 2>/dev/null
             run_global mount --bind "$ORIG_LOWER" "$TARGET_FUSE" 2>/dev/null
@@ -455,17 +569,17 @@ apply_bind_rules() {
     chown media_rw:media_rw "$BASE/$OUT_ROOT" 2>/dev/null
     chmod 770 "$BASE/$OUT_ROOT" 2>/dev/null
 
-    # 在归类总目录放置 .nomedia，防止系统相册把映射目录里的照片/视频重复扫出两份
-    # （仅作用于 Download/应用下载，不影响原 Pictures/DCIM 在相册正常显示，也不影响文件管理器访问）
+    # 二级/三级模式下，在总目录 Download/应用下载/.nomedia 放置 .nomedia 防止相册重复
+    # （一级平铺模式绝不在 Download 根目录放 .nomedia，改为放在各个未挂载的汇总父目录内）
     NOMEDIA_NEW=0
-    if [ ! -f "$BASE/$OUT_ROOT/.nomedia" ]; then
+    if [ "$LAYOUT_MODE" != "1" ] && [ ! -f "$BASE/$OUT_ROOT/.nomedia" ]; then
         touch "$BASE/$OUT_ROOT/.nomedia" 2>/dev/null
         chown media_rw:media_rw "$BASE/$OUT_ROOT/.nomedia" 2>/dev/null
         chmod 660 "$BASE/$OUT_ROOT/.nomedia" 2>/dev/null
         NOMEDIA_NEW=1
     fi
 
-    log_msg "开始应用规则 (FUSE=$USE_FUSE, OUT_ROOT=$OUT_ROOT)"
+    log_msg "开始应用规则 (LAYOUT_MODE=$LAYOUT_MODE, OUT_ROOT=$OUT_ROOT, FUSE=$USE_FUSE)"
 
     MOUNTED_COUNT=0
     SKIPPED_COUNT=0
@@ -480,46 +594,42 @@ apply_bind_rules() {
         LINE="$(printf '%s' "$RAW_LINE" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
         [ -z "$LINE" ] && continue
         case "$LINE" in
-            \#*|AUTO_SCAN=*|SCAN_INTERVAL_HOURS=*|SKIP_EMPTY=*) continue ;;
+            \#*|LAYOUT_MODE=*|AUTO_SCAN=*|SCAN_INTERVAL_HOURS=*|SKIP_EMPTY=*) continue ;;
         esac
 
-        PUB_REL="${LINE%%|*}"
+        RAW_LEFT="${LINE%%|*}"
         ORIG_REL="${LINE#*|}"
 
-        if [ "$PUB_REL" = "$LINE" ] || [ -z "$PUB_REL" ] || [ -z "$ORIG_REL" ]; then
+        if [ "$RAW_LEFT" = "$LINE" ] || [ -z "$RAW_LEFT" ] || [ -z "$ORIG_REL" ]; then
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
             continue
         fi
 
-        PUB_REL="$(printf '%s' "$PUB_REL" | sed 's|^/*||;s|/*$||')"
+        RAW_LEFT="$(printf '%s' "$RAW_LEFT" | sed 's|^/*||;s|/*$||')"
         ORIG_REL="$(printf '%s' "$ORIG_REL" | sed 's|^/*||;s|/*$||')"
 
-        # 归一化软件名，并拦截原始 com.xxx.xxx 包名文件夹
-        case "$PUB_REL" in
-            "$OUT_ROOT"/*)
-                _RAW_APP="${PUB_REL#$OUT_ROOT/}"
-                _RAW_APP="${_RAW_APP%%/*}"
-                _NORM_APP="$(normalize_app_name "$_RAW_APP")"
-                if is_raw_pkg_name "$_NORM_APP"; then
-                    log_msg "[跳过] 已拦截原始包名目录: $_NORM_APP ($ORIG_REL)"
-                    SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
-                    continue
-                fi
-                PUB_REL="$OUT_ROOT/$_NORM_APP"
-                ;;
-        esac
+        PUB_REL="$(resolve_pub_rel "$RAW_LEFT")"
+        _FINAL_APP="${PUB_REL##*/}"
+        if is_raw_pkg_name "$_FINAL_APP"; then
+            log_msg "[跳过] 已拦截原始包名目录: $_FINAL_APP ($ORIG_REL)"
+            SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+            continue
+        fi
 
         PUB_LOWER="$BASE/$PUB_REL"
         ORIG_LOWER="$BASE/$ORIG_REL"
 
-        case "$PUB_LOWER/" in
-            "$ORIG_LOWER/"*)
+        # 防止同路径自挂或递归套娃挂载（如平铺模式下 Download/QQ <- Download/QQ）
+        _PUB_LOW_CI="$(printf '%s' "$PUB_LOWER" | tr 'A-Z' 'a-z')"
+        _ORIG_LOW_CI="$(printf '%s' "$ORIG_LOWER" | tr 'A-Z' 'a-z')"
+        case "$_PUB_LOW_CI/" in
+            "$_ORIG_LOW_CI/"*)
                 SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
                 continue
                 ;;
         esac
-        case "$ORIG_LOWER/" in
-            "$PUB_LOWER/"*)
+        case "$_ORIG_LOW_CI/" in
+            "$_PUB_LOW_CI/"*)
                 SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
                 continue
                 ;;
@@ -537,7 +647,6 @@ apply_bind_rules() {
             fi
         fi
 
-        # 按源路径大小写不敏感去重，彻底杜绝 DCIM/WeiXinWork 与 DCIM/WeixinWork 重复挂载
         _ORIG_KEY="$(printf '%s' "$ORIG_REL" | tr 'A-Z' 'a-z')"
         if ! grep -Fqx "$_ORIG_KEY" "$SEEN_ORIG_LOW" 2>/dev/null; then
             printf '%s\n' "$_ORIG_KEY" >> "$SEEN_ORIG_LOW"
@@ -566,6 +675,13 @@ apply_bind_rules() {
             chown media_rw:media_rw "$BASE/$PUB_REL" 2>/dev/null
             chmod 770 "$BASE/$PUB_REL" 2>/dev/null
 
+            # 平铺模式下，在汇总父目录放 .nomedia 防相册重复（不影响原目录与 Download 根目录）
+            if [ "$LAYOUT_MODE" = "1" ] && [ ! -f "$BASE/$PUB_REL/.nomedia" ]; then
+                touch "$BASE/$PUB_REL/.nomedia" 2>/dev/null
+                chown media_rw:media_rw "$BASE/$PUB_REL/.nomedia" 2>/dev/null
+                chmod 660 "$BASE/$PUB_REL/.nomedia" 2>/dev/null
+            fi
+
             SUB_NAME="$(make_sub_label "$ORIG_REL")"
             CAND_TARGET="$PUB_REL/$SUB_NAME"
             IDX=2
@@ -581,7 +697,6 @@ apply_bind_rules() {
 
     rm -f "$ACTIVE_LIST" "$USED_TARGETS" "$SEEN_ORIG_LOW"
 
-    # 若刚新建 .nomedia，通知媒体库刷新该目录以清除相册中已缓存的重复项
     if [ "$NOMEDIA_NEW" = "1" ] && command -v am >/dev/null 2>&1; then
         am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///storage/emulated/0/$OUT_ROOT" >/dev/null 2>&1
     fi
@@ -592,34 +707,15 @@ apply_bind_rules() {
 
     if [ "$VERBOSE" = "1" ]; then
         echo "-----------------------------------------"
-        echo "执行汇总: $SUMMARY"
-        echo "当前 /sdcard/$OUT_ROOT/ 目录列表:"
-        if [ -d "$BASE/$OUT_ROOT" ]; then
-            for _D in "$BASE/$OUT_ROOT"/*; do
-                [ ! -e "$_D" ] && continue
-                _DN="$(basename "$_D")"
-                if is_mounted "$_D"; then
-                    echo "  [已挂载] $_DN ($(count_user_files "$_D") 项)"
-                else
-                    echo "  [汇总目录] $_DN/"
-                    for _SD in "$_D"/*; do
-                        [ ! -e "$_SD" ] && continue
-                        _SDN="$(basename "$_SD")"
-                        if is_mounted "$_SD"; then
-                            echo "      └─ $_SDN ($(count_user_files "$_SD") 项)"
-                        fi
-                    done
-                fi
-            done
-        fi
-        echo "-----------------------------------------"
-        echo "提示: 手动新增 App 请编辑 $CONF"
-        echo "格式: Download/应用下载/软件名|App原目录相对路径"
+        echo "执行汇总: $SUMMARY (目录模式: LAYOUT_MODE=$LAYOUT_MODE)"
+        echo "生效目录根路径: /sdcard/$OUT_ROOT/"
+        echo "提示: 手动新增 App 请编辑 $CONF（格式: 软件名|App原目录相对路径）"
     fi
 }
 
 unmount_bind_rules() {
-    safe_unmount_and_clean_root "$OUT_ROOT"
+    unmount_recorded_paths
+    safe_unmount_and_clean_root "Download/应用下载"
     safe_unmount_and_clean_root "Download/app"
     safe_unmount_and_clean_root "Download/App"
 }

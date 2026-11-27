@@ -6,7 +6,7 @@
 
 [![Android](https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Root](https://img.shields.io/badge/Root-KernelSU%20%7C%20APatch%20%7C%20Magisk-orange)](https://kernelsu.org)
-[![Version](https://img.shields.io/badge/Release-v3.2.1-blue)](https://github.com/beichen123-hub/app-download-binder/releases)
+[![Version](https://img.shields.io/badge/Release-v3.3.0-blue)](https://github.com/beichen123-hub/app-download-binder/releases)
 [![Offline](https://img.shields.io/badge/Network-Offline%20Only-brightgreen)](#特性)
 [![License](https://img.shields.io/badge/License-GPL--3.0-lightgrey)](#开源协议与免责声明)
 
@@ -47,7 +47,13 @@
 - **一软件一中文文件夹**：内置大小写不敏感的名称归一化与去重机制，同一软件的多条路径自动归拢至单一中文目录，自动拦截 `com.xxx.xxx` 原始包名目录。
 - **严格过滤非下载内容**：自动排除 `cache`、`thumbnails`、`log`、`tmp`、`update`、`upgrade`、系统相册及录屏等干扰目录；Telegram 仅映射 `Telegram Files` 与 `Telegram Documents`，不暴露聊天图片缓存与缩略图。
 - **纯本地零联网**：无任何云端轮询或后台耗电任务；内置 **235 条开源纯下载规则库**（覆盖 104 个常见应用，含开启存储隔离后的 `sdcard/` 路径），并支持每天低功耗定时检测新增应用。
-- **刷入音量键交互**：安装时提供两步音量键确认——先确认风险提示，再自由选择「全自动扫描模式」或「标准规则库模式」。
+- **刷入音量键三步交互（支持 3 种目录层级自选）**：
+  1. 风险提示确认（音量+ 继续 / 音量- 取消）；
+  2. **目录层级结构自选**（可随时在 `rules.conf` 修改 `LAYOUT_MODE`）：
+     - **一级平铺（`LAYOUT_MODE=1`）**：`/sdcard/Download/<软件名>/`（少点一层）；
+     - **二级收纳（`LAYOUT_MODE=2`，推荐）**：`/sdcard/Download/应用下载/<软件名>/`；
+     - **三级分类（`LAYOUT_MODE=3`）**：`/sdcard/Download/应用下载/<分类>/<软件名>/`（自动按社交办公、网盘传输、浏览器、影音图片、购物生活、下载工具、其他应用归类）；
+  3. 规则范围自选（音量+ 全自动扫描 / 音量- 标准 235 条开源规则库）。
 - **自动防相册重复（`.nomedia`）**：在 `/sdcard/Download/应用下载/` 总目录自动放置 `.nomedia`，防止系统相册重复扫出两份一样的照片和视频（原 `Pictures/` 与 `DCIM/` 相册显示与文件管理器浏览均不受影响）。
 - **目录整洁与安全清理**：配置与日志完全收纳于模块目录 `/data/adb/modules/app_download_binder/`，不在普通存储中留下杂文件；覆盖升级与卸载时自动安全解除挂载并清理空挂载点，绝不误删原文件。
 
@@ -95,12 +101,11 @@
 - 已获取 Root 权限（KernelSU / KernelSU Next / APatch / Magisk）
 
 ### 安装步骤
-1. 前往 [Releases](https://github.com/beichen123-hub/app-download-binder/releases) 下载最新版 `App-Download-Binder_v3.2.1.zip`。
+1. 前往 [Releases](https://github.com/beichen123-hub/app-download-binder/releases) 下载最新版 `App-Download-Binder_v3.3.0.zip`。
 2. 在 **KernelSU / APatch / Magisk** 模块页选择压缩包刷入：
    - **步骤 1（风险确认）**：按 **音量上键 (+)** 确认继续，按 **音量下键 (-)** 取消；
-   - **步骤 2（模式选择）**：
-     - **音量上键 (+)**：全自动扫描模式（刷入时自动扫描本机已识别中文名的应用目录并写入配置）；
-     - **音量下键 (-)**：标准规则库模式（仅启用默认规则与内置 235 条开源规则库）。
+   - **步骤 2（目录层级选择）**：按 **音量上键 (+)** 选择收纳在 `Download/应用下载/` 下（再选二级收纳或三级分类），按 **音量下键 (-)** 选择一级平铺在 `Download/<软件名>/`；
+   - **步骤 3（规则模式选择）**：按 **音量上键 (+)** 全自动扫描模式，按 **音量下键 (-)** 标准规则库模式。
 3. **重启手机**并解锁进入桌面，等待约 3 秒后打开文件管理器进入 `Download/应用下载/` 即可查看。
 
 ---

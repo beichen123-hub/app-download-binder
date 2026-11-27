@@ -1,6 +1,6 @@
 id=app_download_binder
 name=App Download Binder (应用下载目录归类)
-version=v3.2.1
-versionCode=321
+version=v3.3.0
+versionCode=330
 author=KrisWu & Antigravity
-description=一软件一中文文件夹归类至 /sdcard/Download/应用下载/<软件名> | 开机解锁自动挂载 | 绝不出现英文包名 | 规则库引用自 Kindness-Net/storage-redirection-x-rules
+description=支持 3 种目录层级自选（平铺/二级收纳/三级分类）| 自动防相册重复 | 开机解锁自动挂载 | 规则库引用自 Kindness-Net/storage-redirection-x-rules

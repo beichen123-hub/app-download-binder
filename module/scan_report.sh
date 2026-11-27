@@ -17,7 +17,7 @@ case "$1" in
 esac
 
 echo "========================================="
-echo "  全机 App 真实存储路径扫描器 (v3.2.1)"
+echo "  全机 App 真实存储路径扫描器 (v3.3.0)"
 echo "  作者: KrisWu & Antigravity"
 echo "========================================="
 echo "[1/3] 正在扫描 Android/data 第三方应用..."
@@ -164,7 +164,7 @@ while IFS='|' read -r CNT PKG_OR_NAME REL_DIR SAMPLE_FILE; do
         NEW_UNCONFIGURED=$((NEW_UNCONFIGURED + 1))
     fi
 
-    LINE_RULE="$OUT_ROOT/$PKG_OR_NAME|$REL_DIR"
+    LINE_RULE="$PKG_OR_NAME|$REL_DIR"
     {
         echo "# [$STATUS] 命中 ${CNT} 个文件 (示例: $SAMPLE_FILE)"
         if [ "$STATUS" = "未配置" ]; then
@@ -177,7 +177,7 @@ while IFS='|' read -r CNT PKG_OR_NAME REL_DIR SAMPLE_FILE; do
     echo "[$STATUS] (${CNT}项) [$PKG_OR_NAME] $REL_DIR"
 
     if [ "$AUTO_APPLY" = "1" ] && [ "$STATUS" = "未配置" ]; then
-        append_auto_rule "$OUT_ROOT/$PKG_OR_NAME" "$REL_DIR" 1
+        append_auto_rule "$PKG_OR_NAME" "$REL_DIR" 1
     fi
 done < "$SORTED"
 
