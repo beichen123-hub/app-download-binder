@@ -19,11 +19,14 @@ wait_volume_key() {
         return 0
     fi
     while true; do
-        KEY_EVT="$(getevent -lqc 1 2>/dev/null | grep -E 'KEY_VOLUMEUP|KEY_VOLUMEDOWN' | grep 'DOWN')"
-        case "$KEY_EVT" in
-            *KEY_VOLUMEUP*) return 0 ;;
-            *KEY_VOLUMEDOWN*) return 1 ;;
-        esac
+        KEY_EVT="$(getevent -lqc 1 2>/dev/null)"
+        if printf '%s\n' "$KEY_EVT" | grep -Eq 'KEY_VOLUMEUP[[:space:]]+DOWN'; then
+            sleep 0.4 2>/dev/null || sleep 1
+            return 0
+        elif printf '%s\n' "$KEY_EVT" | grep -Eq 'KEY_VOLUMEDOWN[[:space:]]+DOWN'; then
+            sleep 0.4 2>/dev/null || sleep 1
+            return 1
+        fi
     done
 }
 
