@@ -2,7 +2,7 @@
 MODDIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "========================================="
-echo "  App Download Binder v3.2.0"
+echo "  App Download Binder v3.2.1"
 echo "  作者: KrisWu & Antigravity"
 echo "========================================="
 

@@ -1,7 +1,7 @@
 #!/system/bin/sh
 
 ui_print "========================================="
-ui_print "  App Download Binder v3.2.0"
+ui_print "  App Download Binder v3.2.1"
 ui_print "  作者: KrisWu & Antigravity"
 ui_print "  适配: KernelSU / APatch / Magisk"
 ui_print "========================================="

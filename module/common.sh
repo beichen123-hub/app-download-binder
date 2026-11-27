@@ -398,7 +398,7 @@ safe_unmount_and_clean_root() {
             is_mounted "$_D" && run_global umount -l "$_D" 2>/dev/null
             safe_remove_empty_mountpoint "$_D"
         done
-        rm -f "$ROOT_LOWER/AppBindRules.conf" 2>/dev/null
+        rm -f "$ROOT_LOWER/AppBindRules.conf" "$ROOT_LOWER/.nomedia" 2>/dev/null
         safe_remove_empty_mountpoint "$ROOT_LOWER"
     fi
 }
@@ -454,6 +454,16 @@ apply_bind_rules() {
     mkdir -p "$BASE/$OUT_ROOT"
     chown media_rw:media_rw "$BASE/$OUT_ROOT" 2>/dev/null
     chmod 770 "$BASE/$OUT_ROOT" 2>/dev/null
+
+    # 在归类总目录放置 .nomedia，防止系统相册把映射目录里的照片/视频重复扫出两份
+    # （仅作用于 Download/应用下载，不影响原 Pictures/DCIM 在相册正常显示，也不影响文件管理器访问）
+    NOMEDIA_NEW=0
+    if [ ! -f "$BASE/$OUT_ROOT/.nomedia" ]; then
+        touch "$BASE/$OUT_ROOT/.nomedia" 2>/dev/null
+        chown media_rw:media_rw "$BASE/$OUT_ROOT/.nomedia" 2>/dev/null
+        chmod 660 "$BASE/$OUT_ROOT/.nomedia" 2>/dev/null
+        NOMEDIA_NEW=1
+    fi
 
     log_msg "开始应用规则 (FUSE=$USE_FUSE, OUT_ROOT=$OUT_ROOT)"
 
@@ -570,6 +580,11 @@ apply_bind_rules() {
     done < "$ACTIVE_LIST"
 
     rm -f "$ACTIVE_LIST" "$USED_TARGETS" "$SEEN_ORIG_LOW"
+
+    # 若刚新建 .nomedia，通知媒体库刷新该目录以清除相册中已缓存的重复项
+    if [ "$NOMEDIA_NEW" = "1" ] && command -v am >/dev/null 2>&1; then
+        am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d "file:///storage/emulated/0/$OUT_ROOT" >/dev/null 2>&1
+    fi
 
     SUMMARY="生效 ${MOUNTED_COUNT} | 跳过 ${SKIPPED_COUNT} | 失败 ${FAILED_COUNT}"
     log_msg "执行汇总: $SUMMARY"

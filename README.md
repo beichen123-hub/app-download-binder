@@ -2,11 +2,11 @@
 
 # App Download Binder
 
-**Android 文件统一整理归类**
+**Android Root 应用下载目录统一归类模块**
 
 [![Android](https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Root](https://img.shields.io/badge/Root-KernelSU%20%7C%20APatch%20%7C%20Magisk-orange)](https://kernelsu.org)
-[![Version](https://img.shields.io/badge/Release-v3.2.0-blue)](https://github.com/beichen123-hub/app-download-binder/releases)
+[![Version](https://img.shields.io/badge/Release-v3.2.1-blue)](https://github.com/beichen123-hub/app-download-binder/releases)
 [![Offline](https://img.shields.io/badge/Network-Offline%20Only-brightgreen)](#特性)
 [![License](https://img.shields.io/badge/License-GPL--3.0-lightgrey)](#开源协议与免责声明)
 
@@ -48,6 +48,7 @@
 - **严格过滤非下载内容**：自动排除 `cache`、`thumbnails`、`log`、`tmp`、`update`、`upgrade`、系统相册及录屏等干扰目录；Telegram 仅映射 `Telegram Files` 与 `Telegram Documents`，不暴露聊天图片缓存与缩略图。
 - **纯本地零联网**：无任何云端轮询或后台耗电任务；内置 **235 条开源纯下载规则库**（覆盖 104 个常见应用，含开启存储隔离后的 `sdcard/` 路径），并支持每天低功耗定时检测新增应用。
 - **刷入音量键交互**：安装时提供两步音量键确认——先确认风险提示，再自由选择「全自动扫描模式」或「标准规则库模式」。
+- **自动防相册重复（`.nomedia`）**：在 `/sdcard/Download/应用下载/` 总目录自动放置 `.nomedia`，防止系统相册重复扫出两份一样的照片和视频（原 `Pictures/` 与 `DCIM/` 相册显示与文件管理器浏览均不受影响）。
 - **目录整洁与安全清理**：配置与日志完全收纳于模块目录 `/data/adb/modules/app_download_binder/`，不在普通存储中留下杂文件；覆盖升级与卸载时自动安全解除挂载并清理空挂载点，绝不误删原文件。
 
 ---
@@ -94,7 +95,7 @@
 - 已获取 Root 权限（KernelSU / KernelSU Next / APatch / Magisk）
 
 ### 安装步骤
-1. 前往 [Releases](https://github.com/beichen123-hub/app-download-binder/releases) 下载最新版 `App-Download-Binder_v3.2.0.zip`。
+1. 前往 [Releases](https://github.com/beichen123-hub/app-download-binder/releases) 下载最新版 `App-Download-Binder_v3.2.1.zip`。
 2. 在 **KernelSU / APatch / Magisk** 模块页选择压缩包刷入：
    - **步骤 1（风险确认）**：按 **音量上键 (+)** 确认继续，按 **音量下键 (-)** 取消；
    - **步骤 2（模式选择）**：
