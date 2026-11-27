@@ -2,7 +2,7 @@
 
 # App Download Binder
 
-**Android Root 应用下载目录统一归类模块**
+**Android 文件统一整理归类**
 
 [![Android](https://img.shields.io/badge/Android-11%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com)
 [![Root](https://img.shields.io/badge/Root-KernelSU%20%7C%20APatch%20%7C%20Magisk-orange)](https://kernelsu.org)
